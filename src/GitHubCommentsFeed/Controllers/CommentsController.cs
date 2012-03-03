@@ -7,11 +7,11 @@ using System.Net;
 using System.ServiceModel.Syndication;
 using System.Text;
 using System.Web.Mvc;
-using GitHubCommentsFeed.Helpers;
-using GitHubCommentsFeed.Models;
+using GitHubFeeds.Helpers;
+using GitHubFeeds.Models;
 using ServiceStack.Text;
 
-namespace GitHubCommentsFeed.Controllers
+namespace GitHubFeeds.Controllers
 {
 	public class CommentsController : AsyncController
 	{
@@ -30,7 +30,7 @@ namespace GitHubCommentsFeed.Controllers
 			if (userName != null && password != null)
 				request.Credentials = new NetworkCredential(userName, password);
 			request.Accept = "application/vnd.github-commitcomment.html+json";
-			request.UserAgent = "GitHubCommentsFeed/1.0";
+			request.UserAgent = "GitHubFeeds/1.0";
 			request.BeginGetResponse(ar =>
 			{
 				AsyncManager.Parameters["result"] = CreateListResult(request, ar, user, repo);

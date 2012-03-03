@@ -1,11 +1,11 @@
 ﻿using System.Reflection;
 using System.Runtime.InteropServices;
 
-[assembly: AssemblyTitle("GitHubCommentsFeed")]
+[assembly: AssemblyTitle("GitHubFeeds")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Bradley Grainger")]
-[assembly: AssemblyProduct("GitHubCommentsFeed")]
+[assembly: AssemblyProduct("GitHubFeeds")]
 [assembly: AssemblyCopyright("Copyright 2012 Bradley Grainger")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

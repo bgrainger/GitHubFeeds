@@ -1,7 +1,7 @@
 ﻿using System.Web.Mvc;
 using System.Web.Routing;
 
-namespace GitHubCommentsFeed
+namespace GitHubFeeds
 {
 	public class MvcApplication : System.Web.HttpApplication
 	{

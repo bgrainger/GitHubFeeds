@@ -1,4 +1,4 @@
-namespace GitHubCommentsFeed.Models
+namespace GitHubFeeds.Models
 {
 	internal sealed class GitHubUser
 	{

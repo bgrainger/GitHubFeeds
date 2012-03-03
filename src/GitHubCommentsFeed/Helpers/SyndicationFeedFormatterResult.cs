@@ -7,7 +7,7 @@ using System.Web;
 using System.Web.Mvc;
 using System.Xml;
 
-namespace GitHubCommentsFeed.Helpers
+namespace GitHubFeeds.Helpers
 {
 	public class SyndicationFeedFormatterResult : ActionResult
 	{
