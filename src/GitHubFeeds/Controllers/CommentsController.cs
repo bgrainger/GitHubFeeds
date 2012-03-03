@@ -56,7 +56,7 @@ namespace GitHubFeeds.Controllers
 				// TODO: Use asynchronous reads on this asynchronous stream
 				// TODO: Read encoding from Content-Type header; don't assume UTF-8
 				using (Stream stream = response.GetResponseStream())
-				using (TextReader reader = new StreamReader(stream, Encoding.UTF8, false))
+				using (TextReader reader = new StreamReader(stream, Encoding.UTF8))
 					comments = JsonSerializer.DeserializeFromReader<List<GitHubComment>>(reader);
 			}
 
