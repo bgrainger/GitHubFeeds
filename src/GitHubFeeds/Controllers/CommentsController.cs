@@ -66,7 +66,11 @@ namespace GitHubFeeds.Controllers
 				.OrderByDescending(c => c.created_at)
 				.Select(c => new SyndicationItem(c.user.login + " commented on " + fullRepoName,
 					new TextSyndicationContent(CreateCommentHtml(c), TextSyndicationContentKind.Html),
-					new Uri(c.html_url), c.url, c.updated_at)))
+					new Uri(c.html_url), c.url, c.updated_at)
+					{
+						Authors = { new SyndicationPerson(null, c.user.login, null)},
+					}
+				))
 			{
 				Id = "urn:x-feed:" + Uri.EscapeDataString(request.RequestUri.AbsoluteUri),
 				LastUpdatedTime = comments.Max(c => c.updated_at),
