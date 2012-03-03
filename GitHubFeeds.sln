@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GitHubFeeds", "src\GitHubCommentsFeed\GitHubFeeds.csproj", "{F03FA90D-3FDE-408C-B30C-370339F1DE47}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GitHubFeeds", "src\GitHubFeeds\GitHubFeeds.csproj", "{F03FA90D-3FDE-408C-B30C-370339F1DE47}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
