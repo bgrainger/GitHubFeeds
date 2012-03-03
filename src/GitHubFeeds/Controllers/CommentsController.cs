@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using System.ServiceModel.Syndication;
 using System.Text;
+using System.Web;
 using System.Web.Mvc;
 using GitHubFeeds.Helpers;
 using GitHubFeeds.Models;
@@ -45,8 +46,8 @@ namespace GitHubFeeds.Controllers
 
 		private static ActionResult CreateListResult(HttpWebRequest request, IAsyncResult asyncResult, string user, string repo)
 		{
+			// download comments as JSON and deserialize them
 			List<GitHubComment> comments;
-
 			using (HttpWebResponse response = GetHttpResponse(request, asyncResult))
 			{
 				if (response.StatusCode != HttpStatusCode.OK)
@@ -59,11 +60,12 @@ namespace GitHubFeeds.Controllers
 					comments = JsonSerializer.DeserializeFromReader<List<GitHubComment>>(reader);
 			}
 
+			// build a feed from the comments (in reverse chronological order)
 			string fullRepoName = user + "/" + repo;
 			SyndicationFeed feed = new SyndicationFeed(comments
 				.OrderByDescending(c => c.created_at)
 				.Select(c => new SyndicationItem(c.user.login + " commented on " + fullRepoName,
-					new TextSyndicationContent(c.body_html, TextSyndicationContentKind.Html),
+					new TextSyndicationContent(CreateCommentHtml(c), TextSyndicationContentKind.Html),
 					new Uri(c.html_url), c.url, c.updated_at)))
 			{
 				Id = "urn:x-feed:" + Uri.EscapeDataString(request.RequestUri.AbsoluteUri),
@@ -72,6 +74,28 @@ namespace GitHubFeeds.Controllers
 			};
 
 			return new SyndicationFeedFormatterResult(feed.GetAtom10Formatter());
+		}
+
+		private static string CreateCommentHtml(GitHubComment comment)
+		{
+			// create URL for the commit from the comment URL
+			string commentUrl = comment.html_url;
+			int hashIndex = commentUrl.IndexOf('#');
+			string commitUrl = hashIndex == -1 ? commentUrl : commentUrl.Substring(0, hashIndex);
+
+			// add description based on whether the comment was on a specific line or not
+			string template = comment.line == 0 ?
+				@"<div>Comment on <a href=""{0}"">commit</a> at" :
+				@"<div>Comment on <a href=""{0}"">{1}</a> <a href=""{0}"">L{2}</a> in";
+			template += @" <a href=""{3}"">{4}</a>:
+	<blockquote>
+		{5}
+	</blockquote>
+</div>";
+
+			return string.Format(CultureInfo.InvariantCulture, template, HttpUtility.HtmlAttributeEncode(commentUrl),
+				HttpUtility.HtmlEncode(comment.path), comment.line, HttpUtility.HtmlAttributeEncode(commitUrl),
+				HttpUtility.HtmlEncode(comment.commit_id.Substring(0, 8)), comment.body_html);
 		}
 
 		// See http://code.logos.com/blog/2009/06/using_if-modified-since_in_http_requests.html
