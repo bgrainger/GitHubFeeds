@@ -87,11 +87,7 @@ namespace GitHubFeeds.Controllers
 			string template = comment.line == 0 ?
 				@"<div>Comment on <a href=""{0}"">commit</a> at" :
 				@"<div>Comment on <a href=""{0}"">{1}</a> <a href=""{0}"">L{2}</a> in";
-			template += @" <a href=""{3}"">{4}</a>:
-	<blockquote>
-		{5}
-	</blockquote>
-</div>";
+			template += @" <a href=""{3}"">{4}</a>:	<blockquote>{5}</blockquote></div>";
 
 			return string.Format(CultureInfo.InvariantCulture, template, HttpUtility.HtmlAttributeEncode(commentUrl),
 				HttpUtility.HtmlEncode(comment.path), comment.line, HttpUtility.HtmlAttributeEncode(commitUrl),
