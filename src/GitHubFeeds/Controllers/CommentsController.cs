@@ -77,7 +77,7 @@ namespace GitHubFeeds.Controllers
 				Title = new TextSyndicationContent(string.Format("Comments for {0}/{1}", user, repo)),
 			};
 
-			return new SyndicationFeedFormatterResult(feed.GetAtom10Formatter());
+			return new SyndicationFeedAtomResult(feed);
 		}
 
 		private static string CreateCommentHtml(GitHubComment comment)

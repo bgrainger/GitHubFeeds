@@ -9,20 +9,20 @@ using System.Xml;
 
 namespace GitHubFeeds.Helpers
 {
-	public class SyndicationFeedFormatterResult : ActionResult
+	public sealed class SyndicationFeedAtomResult : ActionResult
 	{
-		public SyndicationFeedFormatterResult(SyndicationFeedFormatter resource)
+		public SyndicationFeedAtomResult(SyndicationFeed feed)
 		{
-			FeedFormatter = resource;
+			Feed = feed;
 		}
 
-		public SyndicationFeedFormatter FeedFormatter { get; set; }
+		public SyndicationFeed Feed { get; set; }
 
 		public override void ExecuteResult(ControllerContext context)
 		{
 			if (context == null)
 				throw new ArgumentNullException("context");
-			if (FeedFormatter == null)
+			if (Feed == null)
 				throw new InvalidOperationException("FeedFormatter must not be null");
 
 			HttpResponseBase response = context.HttpContext.Response;
@@ -32,8 +32,9 @@ namespace GitHubFeeds.Helpers
 			response.StatusCode = (int) HttpStatusCode.OK;
 			response.ContentType = contentType.ToString();
 
+			SyndicationFeedFormatter formatter = Feed.GetAtom10Formatter();
 			using (XmlWriter xmlWriter = XmlWriter.Create(response.Output, new XmlWriterSettings { Encoding = Encoding.UTF8 }))
-				FeedFormatter.WriteTo(xmlWriter);
+				formatter.WriteTo(xmlWriter);
 		}
 	}
 }
