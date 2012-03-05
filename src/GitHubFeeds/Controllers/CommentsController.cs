@@ -69,6 +69,7 @@ namespace GitHubFeeds.Controllers
 					new Uri(c.html_url), c.url, c.updated_at)
 					{
 						Authors = { new SyndicationPerson(null, c.user.login, null)},
+						PublishDate = c.created_at,
 					}
 				))
 			{
