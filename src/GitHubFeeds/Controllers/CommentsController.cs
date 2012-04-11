@@ -162,7 +162,7 @@ namespace GitHubFeeds.Controllers
 				))
 			{
 				Id = "urn:x-feed:" + Uri.EscapeDataString(p.Server) + "/" + Uri.EscapeDataString(p.User) + "/" + Uri.EscapeDataString(p.Repo),
-				LastUpdatedTime = comments.Max(c => c.updated_at),
+				LastUpdatedTime = comments.Count == 0 ? DateTimeOffset.Now : comments.Max(c => c.updated_at),
 				Title = new TextSyndicationContent(string.Format("Comments for {0}/{1}", p.User, p.Repo)),
 			};
 
