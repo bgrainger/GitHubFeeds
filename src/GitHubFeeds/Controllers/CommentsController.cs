@@ -178,7 +178,7 @@ namespace GitHubFeeds.Controllers
 			string commitUrl = hashIndex == -1 ? commentUrl : commentUrl.Substring(0, hashIndex);
 
 			// add description based on whether the comment was on a specific line or not
-			string template = comment.line == 0 ?
+			string template = comment.line.GetValueOrDefault() == 0 ?
 				@"<div>Comment on <a href=""{0}"">commit</a> at" :
 				@"<div>Comment on <a href=""{0}"">{1}</a> <a href=""{0}"">L{2}</a> in";
 			template += @" <a href=""{3}"">{4}</a>:	<blockquote>{5}</blockquote></div>";
