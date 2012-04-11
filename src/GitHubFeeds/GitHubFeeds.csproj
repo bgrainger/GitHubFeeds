@@ -64,9 +64,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Controllers\CommentsController.cs" />
+    <Compile Include="Models\ListParameters.cs" />
     <Compile Include="Global.asax.cs">
       <DependentUpon>Global.asax</DependentUpon>
     </Compile>
+    <Compile Include="Helpers\HttpWebRequestExtensions.cs" />
     <Compile Include="Helpers\SyndicationFeedAtomResult.cs" />
     <Compile Include="Models\GitHubComment.cs" />
     <Compile Include="Models\GitHubUser.cs" />
