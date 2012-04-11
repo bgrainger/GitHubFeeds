@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -81,16 +82,15 @@ namespace GitHubFeeds.Controllers
 
 			if (!string.IsNullOrWhiteSpace(linkHeader))
 			{
-				// TODO: Implement proper header parsing
-				string[] links = linkHeader.Split(',');
-				foreach (string link in links)
+				foreach (HeaderElement element in HeaderValueParser.ParseHeaderElements(linkHeader))
 				{
-					string[] parts = link.Split(';');
-					Match match;
-					if (parts.Length == 2 && parts[1].Trim() == "rel=\"last\"" && (match = Regex.Match(parts[0], @"[?&]page=(\d+)")).Success)
+					string rel;
+					if (element.TryGetParameterByName("rel", out rel) && rel == "last")
 					{
+						// HACK: parse the page number out of the URL that links to the last page; this will be the total number of comments
+						Match match = Regex.Match(element.Name, @"[?&]page=(\d+)");
+						Debug.Assert(match.Success, "match.Success", "Page number could not be parsed from URL.");
 						commentCount = int.Parse(match.Groups[1].Value);
-						break;
 					}
 				}
 			}
