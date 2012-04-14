@@ -25,12 +25,12 @@ namespace GitHubFeeds.Controllers
 			AsyncManager.OutstandingOperations.Increment();
 
 			m_requestETag = Request.Headers["If-None-Match"];
-			Uri uri = CreateUri(p, 1, 1);
+			Uri uri = CreateCommentsPageUri(p, 1, 1);
 			HttpWebRequest request = CreateRequest(p, uri);
 			request.GetHttpResponseAsync()
 				.ContinueWith(t => GetCommentCount(t))
 				.ContinueWith(t => GetCommentPages(p, t.Result))
-				.ContinueWith(t => TaskUtility.ContinueWhenAll(t.Result, ts => GetComments(ts))).Unwrap()
+				.ContinueWith(t => TaskUtility.ContinueWhenAll(t.Result, GetComments)).Unwrap()
 				.ContinueWith(t => CreateFeed(p, t.Result))
 				.ContinueWith(t =>
 				{
@@ -46,7 +46,7 @@ namespace GitHubFeeds.Controllers
 		}
 
 		// Creates the URI for comments for the specified repo, with a specific page size and offset.
-		private static Uri CreateUri(ListParameters p, int pageOffset, int pageSize)
+		private static Uri CreateCommentsPageUri(ListParameters p, int pageOffset, int pageSize)
 		{
 			// create URI for GitHub.com or GitHub Enterprise
 			string uriTemplate = p.Server == "api.github.com" ?
@@ -121,11 +121,11 @@ namespace GitHubFeeds.Controllers
 			if (commentCount > 50 && (commentCount % c_pageSize < 50))
 			{
 				// there are at least 50 items, but the last page doesn't contain at least 50
-				uris.Add(CreateUri(p, lastPageOffset - 1, c_pageSize));
+				uris.Add(CreateCommentsPageUri(p, lastPageOffset - 1, c_pageSize));
 			}
 
 			// get the last page of comments
-			uris.Add(CreateUri(p, lastPageOffset, c_pageSize));
+			uris.Add(CreateCommentsPageUri(p, lastPageOffset, c_pageSize));
 
 			// return a task for each URI
 			return uris.Select(u => CreateRequest(p, u).GetHttpResponseAsync()).ToArray();
