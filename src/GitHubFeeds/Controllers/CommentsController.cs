@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Security.Cryptography;
 using System.ServiceModel.Syndication;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -23,14 +24,15 @@ namespace GitHubFeeds.Controllers
 		{
 			AsyncManager.OutstandingOperations.Increment();
 
+			ListData data = new ListData { RequestETag = Request.Headers["If-None-Match"] };
 			Uri uri = CreateUri(p, 1, 1);
 			HttpWebRequest request = CreateRequest(p, uri);
 			request.GetHttpResponseAsync()
-				.ContinueWith(t => GetCommentCount(p, t))
+				.ContinueWith(t => GetCommentCount(t))
 				.ContinueWith(t => GetCommentPages(p, t.Result))
-				.ContinueWith(t => Task.Factory.ContinueWhenAll(t.Result, ts => GetComments(p, ts))).Unwrap()
+				.ContinueWith(t => Task.Factory.ContinueWhenAll(t.Result, ts => GetComments(data, ts))).Unwrap()
 				.ContinueWith(t => CreateFeed(p, t.Result))
-				.ContinueWith(t => CreateResult(p, t))
+				.ContinueWith(t => CreateResult(data, t))
 				.ContinueWith(t =>
 				{
 					AsyncManager.Parameters["result"] = t.Result;
@@ -66,7 +68,7 @@ namespace GitHubFeeds.Controllers
 		}
 
 		// Gets the number of comments for a repo.
-		private static int GetCommentCount(ListParameters p, Task<HttpWebResponse> responseTask)
+		private static int GetCommentCount(Task<HttpWebResponse> responseTask)
 		{
 			string linkHeader;
 			using (HttpWebResponse response = responseTask.Result)
@@ -120,8 +122,11 @@ namespace GitHubFeeds.Controllers
 		}
 
 		// Merges the comments returned from multiple HTTP requests and returns the last 50.
-		private static List<GitHubComment> GetComments(ListParameters p, Task<HttpWebResponse>[] tasks)
+		private static List<GitHubComment> GetComments(ListData data, Task<HttpWebResponse>[] tasks)
 		{
+			// concatenate all the response URIs and ETags; we will use this to build our own ETag
+			var responseETags = new List<string>();
+
 			// download comments as JSON and deserialize them
 			List<GitHubComment> comments = new List<GitHubComment>();
 			foreach (Task<HttpWebResponse> task in tasks)
@@ -131,12 +136,32 @@ namespace GitHubFeeds.Controllers
 					if (response.StatusCode != HttpStatusCode.OK)
 						throw new ApplicationException("GitHub server returned " + response.StatusCode);
 
+					// if the response has an ETag, add it to the list of all ETags
+					string eTag = response.Headers[HttpResponseHeader.ETag];
+					if (!string.IsNullOrEmpty(eTag))
+						responseETags.Add(response.ResponseUri.AbsoluteUri + ":" + eTag);
+
 					// TODO: Use asynchronous reads on this asynchronous stream
 					// TODO: Read encoding from Content-Type header; don't assume UTF-8
 					using (Stream stream = response.GetResponseStream())
 					using (TextReader reader = new StreamReader(stream, Encoding.UTF8))
 						comments.AddRange(JsonSerializer.DeserializeFromReader<List<GitHubComment>>(reader));
 				}
+			}
+
+			// if each response had an ETag, build our own ETag from that data
+			if (responseETags.Count == tasks.Length)
+			{
+				// concatenate all the ETag data
+				string eTagData = responseETags.Join("\n");
+
+				// hash it
+				byte[] md5;
+				using (MD5 hash = MD5.Create())
+					md5 = hash.ComputeHash(Encoding.UTF8.GetBytes(eTagData));
+
+				// the ETag is the quoted MD5 hash
+				data.ResponseETag = "\"" + string.Join("", md5.Select(by => by.ToString("x2", CultureInfo.InvariantCulture))) + "\"";
 			}
 
 			return comments
@@ -187,19 +212,25 @@ namespace GitHubFeeds.Controllers
 				HttpUtility.HtmlEncode(comment.commit_id.Substring(0, 8)), comment.body_html);
 		}
 
-		private ActionResult CreateResult(ListParameters p, Task<SyndicationFeed> feedTask)
+		private ActionResult CreateResult(ListData data, Task<SyndicationFeed> feedTask)
 		{
 			if (feedTask.IsFaulted)
 				return new HttpStatusCodeResult((int) HttpStatusCode.InternalServerError, feedTask.Exception.Message);
 
-			SyndicationFeed feed = feedTask.Result;
-			Response.AppendHeader("Last-Modified", feed.LastUpdatedTime.ToString("r"));
+			if (data.ResponseETag != null)
+				Response.AppendHeader("ETag", data.ResponseETag);
 
-			DateTime ifModifiedSince;
-			if (DateTime.TryParse(Request.Headers["If-Modified-Since"], out ifModifiedSince) && ifModifiedSince >= feed.LastUpdatedTime)
+			if (data.RequestETag == data.ResponseETag)
 				return new HttpStatusCodeResult((int) HttpStatusCode.NotModified);
 
 			return new SyndicationFeedAtomResult(feedTask.Result);			
+		}
+
+		// ListData contains private state that needs to be communicated between the various async methods invoked by List.
+		private sealed class ListData
+		{
+			public string RequestETag { get; set; }
+			public string ResponseETag { get; set; }
 		}
 	}
 }
