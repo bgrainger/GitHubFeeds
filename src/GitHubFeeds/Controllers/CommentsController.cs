@@ -30,11 +30,10 @@ namespace GitHubFeeds.Controllers
 				.ContinueWith(t => GetCommentPages(p, t.Result))
 				.ContinueWith(t => Task.Factory.ContinueWhenAll(t.Result, ts => GetComments(p, ts))).Unwrap()
 				.ContinueWith(t => CreateFeed(p, t.Result))
+				.ContinueWith(t => CreateResult(p, t))
 				.ContinueWith(t =>
 				{
-					AsyncManager.Parameters["result"] = t.IsFaulted ?
-						(ActionResult) new HttpStatusCodeResult(500, t.Exception.Message) :
-						new SyndicationFeedAtomResult(t.Result);
+					AsyncManager.Parameters["result"] = t.Result;
 					AsyncManager.OutstandingOperations.Decrement();
 				});
 		}
@@ -186,6 +185,21 @@ namespace GitHubFeeds.Controllers
 			return string.Format(CultureInfo.InvariantCulture, template, HttpUtility.HtmlAttributeEncode(commentUrl),
 				HttpUtility.HtmlEncode(comment.path), comment.line, HttpUtility.HtmlAttributeEncode(commitUrl),
 				HttpUtility.HtmlEncode(comment.commit_id.Substring(0, 8)), comment.body_html);
+		}
+
+		private ActionResult CreateResult(ListParameters p, Task<SyndicationFeed> feedTask)
+		{
+			if (feedTask.IsFaulted)
+				return new HttpStatusCodeResult((int) HttpStatusCode.InternalServerError, feedTask.Exception.Message);
+
+			SyndicationFeed feed = feedTask.Result;
+			Response.AppendHeader("Last-Modified", feed.LastUpdatedTime.ToString("r"));
+
+			DateTime ifModifiedSince;
+			if (DateTime.TryParse(Request.Headers["If-Modified-Since"], out ifModifiedSince) && ifModifiedSince >= feed.LastUpdatedTime)
+				return new HttpStatusCodeResult((int) HttpStatusCode.NotModified);
+
+			return new SyndicationFeedAtomResult(feedTask.Result);			
 		}
 	}
 }
