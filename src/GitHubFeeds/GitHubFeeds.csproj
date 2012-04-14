@@ -66,6 +66,7 @@
     <Compile Include="Controllers\CommentsController.cs" />
     <Compile Include="Helpers\HeaderElement.cs" />
     <Compile Include="Helpers\HeaderValueParser.cs" />
+    <Compile Include="Helpers\TaskUtility.cs" />
     <Compile Include="Models\ListParameters.cs" />
     <Compile Include="Global.asax.cs">
       <DependentUpon>Global.asax</DependentUpon>

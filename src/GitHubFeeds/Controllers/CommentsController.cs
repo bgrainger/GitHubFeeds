@@ -24,18 +24,18 @@ namespace GitHubFeeds.Controllers
 		{
 			AsyncManager.OutstandingOperations.Increment();
 
-			ListData data = new ListData { RequestETag = Request.Headers["If-None-Match"] };
+			m_requestETag = Request.Headers["If-None-Match"];
 			Uri uri = CreateUri(p, 1, 1);
 			HttpWebRequest request = CreateRequest(p, uri);
 			request.GetHttpResponseAsync()
 				.ContinueWith(t => GetCommentCount(t))
 				.ContinueWith(t => GetCommentPages(p, t.Result))
-				.ContinueWith(t => Task.Factory.ContinueWhenAll(t.Result, ts => GetComments(data, ts))).Unwrap()
+				.ContinueWith(t => TaskUtility.ContinueWhenAll(t.Result, ts => GetComments(ts))).Unwrap()
 				.ContinueWith(t => CreateFeed(p, t.Result))
-				.ContinueWith(t => CreateResult(data, t))
 				.ContinueWith(t =>
 				{
-					AsyncManager.Parameters["result"] = t.Result;
+					AsyncManager.Parameters["result"] = !t.IsFaulted ? m_result :
+						new HttpStatusCodeResult((int) HttpStatusCode.InternalServerError, t.Exception.Message);
 					AsyncManager.OutstandingOperations.Decrement();
 				});
 		}
@@ -68,13 +68,20 @@ namespace GitHubFeeds.Controllers
 		}
 
 		// Gets the number of comments for a repo.
-		private static int GetCommentCount(Task<HttpWebResponse> responseTask)
+		private int GetCommentCount(Task<HttpWebResponse> responseTask)
 		{
 			string linkHeader;
 			using (HttpWebResponse response = responseTask.Result)
 			{
-				if (response.StatusCode != HttpStatusCode.OK)
+				if (response.StatusCode == HttpStatusCode.NotFound)
+				{
+					m_result = HttpNotFound();
+					return 0;
+				}
+				else if (response.StatusCode != HttpStatusCode.OK)
+				{
 					throw new ApplicationException("GitHub server returned " + response.StatusCode);
+				}
 
 				linkHeader = response.Headers["Link"];
 			}
@@ -100,8 +107,11 @@ namespace GitHubFeeds.Controllers
 		}
 
 		// Returns an array of tasks that will download the last 50 comments for a particular repo.
-		private static Task<HttpWebResponse>[] GetCommentPages(ListParameters p, int commentCount)
+		private Task<HttpWebResponse>[] GetCommentPages(ListParameters p, int commentCount)
 		{
+			if (m_result != null)
+				return new Task<HttpWebResponse>[0];
+
 			// determine the offset of the last page of comments
 			const int c_pageSize = 100;
 			int lastPageOffset = (commentCount - 1) / c_pageSize + 1;
@@ -122,8 +132,11 @@ namespace GitHubFeeds.Controllers
 		}
 
 		// Merges the comments returned from multiple HTTP requests and returns the last 50.
-		private static List<GitHubComment> GetComments(ListData data, Task<HttpWebResponse>[] tasks)
+		private List<GitHubComment> GetComments(Task<HttpWebResponse>[] tasks)
 		{
+			if (m_result != null)
+				return null;
+
 			// concatenate all the response URIs and ETags; we will use this to build our own ETag
 			var responseETags = new List<string>();
 
@@ -161,7 +174,14 @@ namespace GitHubFeeds.Controllers
 					md5 = hash.ComputeHash(Encoding.UTF8.GetBytes(eTagData));
 
 				// the ETag is the quoted MD5 hash
-				data.ResponseETag = "\"" + string.Join("", md5.Select(by => by.ToString("x2", CultureInfo.InvariantCulture))) + "\"";
+				string responseETag = "\"" + string.Join("", md5.Select(by => by.ToString("x2", CultureInfo.InvariantCulture))) + "\"";
+				Response.AppendHeader("ETag", responseETag);
+
+				if (m_requestETag == responseETag)
+				{
+					m_result = new HttpStatusCodeResult((int) HttpStatusCode.NotModified);
+					return null;
+				}
 			}
 
 			return comments
@@ -171,8 +191,11 @@ namespace GitHubFeeds.Controllers
 		}
 
 		// Creates an ATOM feed from a list of comments.
-		private static SyndicationFeed CreateFeed(ListParameters p, List<GitHubComment> comments)
+		private void CreateFeed(ListParameters p, List<GitHubComment> comments)
 		{
+			if (m_result != null)
+				return;
+
 			// build a feed from the comments (in reverse chronological order)
 			string fullRepoName = p.User + "/" + p.Repo;
 			SyndicationFeed feed = new SyndicationFeed(comments
@@ -190,7 +213,7 @@ namespace GitHubFeeds.Controllers
 				Title = new TextSyndicationContent(string.Format("Comments for {0}/{1}", p.User, p.Repo)),
 			};
 
-			return feed;
+			m_result = new SyndicationFeedAtomResult(feed);
 		}
 
 		// Creates the HTML for a feed item for an individual comment.
@@ -212,25 +235,7 @@ namespace GitHubFeeds.Controllers
 				HttpUtility.HtmlEncode(comment.commit_id.Substring(0, 8)), comment.body_html);
 		}
 
-		private ActionResult CreateResult(ListData data, Task<SyndicationFeed> feedTask)
-		{
-			if (feedTask.IsFaulted)
-				return new HttpStatusCodeResult((int) HttpStatusCode.InternalServerError, feedTask.Exception.Message);
-
-			if (data.ResponseETag != null)
-				Response.AppendHeader("ETag", data.ResponseETag);
-
-			if (data.RequestETag == data.ResponseETag)
-				return new HttpStatusCodeResult((int) HttpStatusCode.NotModified);
-
-			return new SyndicationFeedAtomResult(feedTask.Result);			
-		}
-
-		// ListData contains private state that needs to be communicated between the various async methods invoked by List.
-		private sealed class ListData
-		{
-			public string RequestETag { get; set; }
-			public string ResponseETag { get; set; }
-		}
+		string m_requestETag;
+		ActionResult m_result;
 	}
 }
