@@ -9,7 +9,6 @@ using System.Security.Cryptography;
 using System.ServiceModel.Syndication;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.Mvc;
@@ -19,38 +18,24 @@ using ServiceStack.Text;
 
 namespace GitHubFeeds.Controllers
 {
-	public class CommentsController : AsyncController
+	public class CommentsController : PipelineAsyncController
 	{
 		public void ListAsync(ListParameters p)
 		{
+			// save the client's ETag, which will be used to determine if a "Not Modified" result should be returned
 			m_requestETag = Request.Headers["If-None-Match"];
 
-			// we will cancel this cancellation token source whenever we have created the final ActionResult
-			//   and need to abort further processing
-			m_cancellationTokenSource = new CancellationTokenSource();
-			var token = m_cancellationTokenSource.Token;
-
-			// start by getting the first comment (asynchronously), then chain each step in the pipeline to the
-			//   previous task (using ContinueWith), specifying the cancellation token to avoid unnecessary operations
-			AsyncManager.OutstandingOperations.Increment();
-			Uri uri = CreateCommentsPageUri(p, 1, 1);
-			HttpWebRequest request = CreateRequest(p, uri);
-			request.GetHttpResponseAsync()
-				.ContinueWith(t => GetCommentCount(t))
-				.ContinueWith(t => GetCommentPages(p, t.Result), token)
-				.ContinueWith(t => TaskUtility.ContinueWhenAll(t.Result, GetComments), token).Unwrap()
-				.ContinueWith(t => CreateFeed(p, t.Result), token)
-				.ContinueWith(t =>
-				{
-					AsyncManager.Parameters["result"] = !t.IsFaulted ? m_result :
-						new HttpStatusCodeResult((int) HttpStatusCode.InternalServerError, t.Exception.Message);
-					AsyncManager.OutstandingOperations.Decrement();
-				});
+			// start the asynchronous processing pipeline
+			Start(p, GetFirstComment)
+				.Then(GetCommentCount)
+				.Then(GetCommentPages)
+				.Then(GetComments)
+				.Then(CreateFeed)
+				.Finish();
 		}
 
 		public ActionResult ListCompleted(ActionResult result)
 		{
-			m_cancellationTokenSource.Dispose();
 			return result;
 		}
 
@@ -76,8 +61,16 @@ namespace GitHubFeeds.Controllers
 			return request;
 		}
 
+		// Starts a WebRequest to retrieve the first comment for a repo.
+		private static Task<HttpWebResponse> GetFirstComment(ListParameters p)
+		{
+			Uri uri = CreateCommentsPageUri(p, 1, 1);
+			HttpWebRequest request = CreateRequest(p, uri);
+			return request.GetHttpResponseAsync();
+		}
+
 		// Gets the number of comments for a repo.
-		private int GetCommentCount(Task<HttpWebResponse> responseTask)
+		private int GetCommentCount(ListParameters p, Task<HttpWebResponse> responseTask)
 		{
 			string linkHeader;
 			using (HttpWebResponse response = responseTask.Result)
@@ -116,7 +109,7 @@ namespace GitHubFeeds.Controllers
 		}
 
 		// Returns an array of tasks that will download the last 50 comments for a particular repo.
-		private Task<HttpWebResponse>[] GetCommentPages(ListParameters p, int commentCount)
+		private static Task<HttpWebResponse>[] GetCommentPages(ListParameters p, int commentCount)
 		{
 			// determine the offset of the last page of comments
 			const int c_pageSize = 100;
@@ -138,7 +131,7 @@ namespace GitHubFeeds.Controllers
 		}
 
 		// Merges the comments returned from multiple HTTP requests and returns the last 50.
-		private List<GitHubComment> GetComments(Task<HttpWebResponse>[] tasks)
+		private List<GitHubComment> GetComments(ListParameters p, Task<HttpWebResponse>[] tasks)
 		{
 			// concatenate all the response URIs and ETags; we will use this to build our own ETag
 			var responseETags = new List<string>();
@@ -194,7 +187,7 @@ namespace GitHubFeeds.Controllers
 		}
 
 		// Creates an ATOM feed from a list of comments.
-		private void CreateFeed(ListParameters p, List<GitHubComment> comments)
+		private bool CreateFeed(ListParameters p, List<GitHubComment> comments)
 		{
 			// build a feed from the comments (in reverse chronological order)
 			string fullRepoName = p.User + "/" + p.Repo;
@@ -214,6 +207,7 @@ namespace GitHubFeeds.Controllers
 			};
 
 			SetResult(new SyndicationFeedAtomResult(feed));
+			return true;
 		}
 
 		// Creates the HTML for a feed item for an individual comment.
@@ -235,15 +229,6 @@ namespace GitHubFeeds.Controllers
 				HttpUtility.HtmlEncode(comment.commit_id.Substring(0, 8)), comment.body_html);
 		}
 
-		private void SetResult(ActionResult result)
-		{
-			// store the result and stop any further processing
-			m_result = result;
-			m_cancellationTokenSource.Cancel();
-		}
-
 		string m_requestETag;
-		CancellationTokenSource m_cancellationTokenSource;
-		ActionResult m_result;
 	}
 }
