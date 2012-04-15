@@ -43,9 +43,8 @@ namespace GitHubFeeds.Controllers
 		private static Uri CreateCommentsPageUri(ListParameters p, int pageOffset, int pageSize)
 		{
 			// create URI for GitHub.com or GitHub Enterprise
-			string uriTemplate = p.Server == "api.github.com" ?
-				@"https://{0}/repos/{1}/{2}/comments?page={3}&per_page={4}" :
-				@"http://{0}/api/v3/repos/{1}/{2}/comments?page={3}&per_page={4}";
+			string baseUri = p.Server == "api.github.com" ? @"https://{0}/repos/" : @"http://{0}/api/v3/repos/";
+			string uriTemplate = baseUri + @"{1}/{2}/comments?page={3}&per_page={4}";
 			return new Uri(string.Format(CultureInfo.InvariantCulture, uriTemplate, Uri.EscapeDataString(p.Server),
 				Uri.EscapeDataString(p.User), Uri.EscapeDataString(p.Repo), pageOffset, pageSize));
 		}
