@@ -1,0 +1,23 @@
+﻿body {
+    color: #333;
+    font-family: Segoe UI, Helvetica
+}
+
+.content {
+    margin: 0 auto;
+    width: 600px;
+}
+
+h1 {
+    font-size: 24px;
+    margin: 12px 0;
+}
+
+.serverinfo 
+{
+    margin: 32px 0 0 0;
+    border-top: 1px dashed #888;
+    font-size: 75%;
+    color: #888;
+    padding: 8px;
+}

@@ -15,11 +15,16 @@ namespace GitHubFeeds
 			routes.IgnoreRoute("{resource}.axd/{*pathInfo}");
 
 			routes.MapRoute(
-				"Default", // Route name
+				"About",
+				"",
+				new { controller = "Home", action = "About" }
+			);
+
+			routes.MapRoute(
+				"Comments",
 				"comments/{server}/{user}/{repo}",
 				new { controller = "Comments", action = "List" }
 			);
-
 		}
 
 		protected void Application_Start()

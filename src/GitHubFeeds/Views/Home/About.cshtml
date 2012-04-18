@@ -1,0 +1,15 @@
+﻿@using GitHubFeeds.Models
+@model AboutViewModel
+
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<h1>Welcome to GitHubFeeds!</h1>
+<p>Congratulations&mdash;you have successfully deployed GitHubFeeds.</p>
+<p>For more information, please visit the <a href="https://github.com/bgrainger/GitHubFeeds">project on GitHub</a>.</p>
+	
+<p></p>
+<div class="serverinfo">
+	@Model.RateLimitRemaining.ToString("n0") remaining GitHub API requests. GitHubFeeds @Model.Version built on @Model.BuildDate.ToString("u").
+</div>

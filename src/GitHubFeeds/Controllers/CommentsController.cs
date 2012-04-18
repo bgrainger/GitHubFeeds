@@ -52,11 +52,8 @@ namespace GitHubFeeds.Controllers
 		// Creates a HTTP request to access the specified URI.
 		private static HttpWebRequest CreateRequest(ListParameters p, Uri uri)
 		{
-			HttpWebRequest request = (HttpWebRequest) WebRequest.Create(uri);
-			if (p.UserName != null && p.Password != null)
-				request.Credentials = new NetworkCredential(p.UserName, p.Password);
+			HttpWebRequest request = GitHubApi.CreateRequest(uri, p.UserName, p.Password);
 			request.Accept = "application/vnd.github-commitcomment.html+json";
-			request.UserAgent = "GitHubFeeds/1.0";
 			return request;
 		}
 
