@@ -190,7 +190,7 @@ namespace GitHubFeeds.Controllers
 			SyndicationFeed feed = new SyndicationFeed(comments
 				.Select(c => new SyndicationItem(c.user.login + " commented on " + fullRepoName,
 					new TextSyndicationContent(CreateCommentHtml(c), TextSyndicationContentKind.Html),
-					new Uri(c.html_url), c.url, c.updated_at)
+					c.html_url, c.url.AbsoluteUri, c.updated_at)
 					{
 						Authors = { new SyndicationPerson(null, c.user.login, null)},
 						PublishDate = c.created_at,
@@ -210,7 +210,7 @@ namespace GitHubFeeds.Controllers
 		private static string CreateCommentHtml(GitHubComment comment)
 		{
 			// create URL for the commit from the comment URL
-			string commentUrl = comment.html_url;
+			string commentUrl = comment.html_url.AbsoluteUri;
 			int hashIndex = commentUrl.IndexOf('#');
 			string commitUrl = hashIndex == -1 ? commentUrl : commentUrl.Substring(0, hashIndex);
 
