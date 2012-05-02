@@ -206,7 +206,7 @@ namespace GitHubFeeds.Helpers
 			/// <returns>The next stage in the asynchronous pipeline.</returns>
 			public Pipe<TParameters, TResult> Then<TResult>(Func<TParameters, Task<TInput>[], TResult> continuationFunction)
 			{
-				Task<TResult> newTask = m_task.ContinueWith(t => Task.Factory.ContinueWhenAll(t.Result, ts => continuationFunction(m_parameters, ts)),
+				Task<TResult> newTask = m_task.ContinueWith(t => TaskUtility.ContinueWhenAll(t.Result, ts => continuationFunction(m_parameters, ts)),
 					m_controller.m_token, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Current).Unwrap();
 				return new Pipe<TParameters, TResult>(m_controller, m_parameters, newTask);
 			}

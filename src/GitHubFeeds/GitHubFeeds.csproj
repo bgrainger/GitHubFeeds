@@ -97,6 +97,9 @@
     <Compile Include="Helpers\PipelineAsyncController.cs" />
     <Compile Include="Helpers\TaskUtility.cs" />
     <Compile Include="Models\AboutViewModel.cs" />
+    <Compile Include="Models\GitHubFile.cs" />
+    <Compile Include="Models\GitHubGitCommit.cs" />
+    <Compile Include="Models\GitHubCommit.cs" />
     <Compile Include="Models\ListParameters.cs" />
     <Compile Include="Global.asax.cs">
       <DependentUpon>Global.asax</DependentUpon>

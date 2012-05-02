@@ -30,6 +30,8 @@ namespace GitHubFeeds.Controllers
 				.Then(GetCommentCount)
 				.Then(GetCommentPages)
 				.Then(GetComments)
+				.Then(RequestCommits)
+				.Then(GetCommits)
 				.Then(CreateFeed)
 				.Finish();
 		}
@@ -158,7 +160,7 @@ namespace GitHubFeeds.Controllers
 			if (responseETags.Count == tasks.Length)
 			{
 				// concatenate all the ETag data
-				string eTagData = responseETags.Join("\n");
+				string eTagData = p.View + "\n" + responseETags.Join("\n");
 
 				// hash it
 				byte[] md5;
@@ -182,20 +184,70 @@ namespace GitHubFeeds.Controllers
 				.ToList();
 		}
 
+		private Task<HttpWebResponse>[] RequestCommits(ListParameters p, List<GitHubComment> comments)
+		{
+			m_comments = comments;
+
+			List<Task<HttpWebResponse>> tasks = new List<Task<HttpWebResponse>>();
+
+			if (p.View == "full")
+			{
+				m_commits = new Dictionary<string, GitHubCommit>();
+
+				foreach (var commitId in comments.Select(c => c.commit_id).Distinct())
+				{
+					// look up commit in cache
+					var commit = (GitHubCommit) HttpContext.Cache.Get("commit:" + commitId);
+
+					if (commit != null)
+					{
+						// if found, store it locally (in case it gets evicted from cache)
+						m_commits.Add(commitId, commit);
+					}
+					else
+					{
+						// if not found, request it
+						string baseUri = p.Server == "api.github.com" ? @"https://{0}/repos/" : @"http://{0}/api/v3/repos/";
+						string uriTemplate = baseUri + @"{1}/{2}/commits/{3}";
+						Uri uri = new Uri(string.Format(CultureInfo.InvariantCulture, uriTemplate, Uri.EscapeDataString(p.Server),
+							Uri.EscapeDataString(p.User), Uri.EscapeDataString(p.Repo), Uri.EscapeDataString(commitId)));
+
+						var request = GitHubApi.CreateRequest(uri, p.UserName, p.Password);
+						tasks.Add(request.GetHttpResponseAsync());
+					}
+				}
+			}
+
+			return tasks.ToArray();
+		}
+
+		private List<GitHubComment> GetCommits(ListParameters p, Task<HttpWebResponse>[] responseTasks)
+		{
+			foreach (var responseTask in responseTasks)
+			{
+				GitHubCommit commit;
+				using (var response = responseTask.Result)
+				{
+					using (Stream stream = response.GetResponseStream())
+					using (TextReader reader = new StreamReader(stream, Encoding.UTF8))
+						commit = JsonSerializer.DeserializeFromReader<GitHubCommit>(reader);
+				}
+
+				string commitId = commit.sha;
+				HttpContext.Cache.Insert("commit:" + commitId, commit);
+				m_commits.Add(commitId, commit);
+			}
+
+			return m_comments;
+		}
+
 		// Creates an ATOM feed from a list of comments.
 		private bool CreateFeed(ListParameters p, List<GitHubComment> comments)
 		{
 			// build a feed from the comments (in reverse chronological order)
 			string fullRepoName = p.User + "/" + p.Repo;
-			SyndicationFeed feed = new SyndicationFeed(comments
-				.Select(c => new SyndicationItem(c.user.login + " commented on " + fullRepoName,
-					new TextSyndicationContent(CreateCommentHtml(c), TextSyndicationContentKind.Html),
-					c.html_url, c.url.AbsoluteUri, c.updated_at)
-					{
-						Authors = { new SyndicationPerson(null, c.user.login, null)},
-						PublishDate = c.created_at,
-					}
-				))
+			SyndicationFeed feed = new SyndicationFeed(comments.Select(c =>
+				p.View == "full" ? CreateFullCommentItem(c, fullRepoName) : CreateCommentItem(c, fullRepoName)))
 			{
 				Id = "urn:x-feed:" + Uri.EscapeDataString(p.Server) + "/" + Uri.EscapeDataString(p.User) + "/" + Uri.EscapeDataString(p.Repo),
 				LastUpdatedTime = comments.Count == 0 ? DateTimeOffset.Now : comments.Max(c => c.updated_at),
@@ -204,6 +256,17 @@ namespace GitHubFeeds.Controllers
 
 			SetResult(new SyndicationFeedAtomResult(feed));
 			return true;
+		}
+
+		private SyndicationItem CreateCommentItem(GitHubComment comment, string fullRepoName)
+		{
+			return new SyndicationItem(comment.user.login + " commented on " + fullRepoName,
+				new TextSyndicationContent(CreateCommentHtml(comment), TextSyndicationContentKind.Html),
+				comment.html_url, comment.url.AbsoluteUri, comment.updated_at)
+			{
+				Authors = { new SyndicationPerson(null, comment.user.login, null) },
+				PublishDate = comment.created_at,
+			};
 		}
 
 		// Creates the HTML for a feed item for an individual comment.
@@ -216,7 +279,7 @@ namespace GitHubFeeds.Controllers
 
 			// add description based on whether the comment was on a specific line or not
 			string template = comment.line.GetValueOrDefault() == 0 ?
-				@"<div>Comment on <a href=""{0}"">commit</a> at" :
+				@"<div><a href=""{0}"">Comment</a> on" :
 				@"<div>Comment on <a href=""{0}"">{1}</a> <a href=""{0}"">L{2}</a> in";
 			template += @" <a href=""{3}"">{4}</a>:	<blockquote>{5}</blockquote></div>";
 
@@ -225,6 +288,45 @@ namespace GitHubFeeds.Controllers
 				HttpUtility.HtmlEncode(comment.commit_id.Substring(0, 8)), comment.body_html);
 		}
 
+		private SyndicationItem CreateFullCommentItem(GitHubComment comment, string fullRepoName)
+		{
+			string author = m_commits[comment.commit_id].author.login;
+
+			return new SyndicationItem("Comment on {0}’s commit".FormatWith(author),
+				new TextSyndicationContent(CreateFullCommentHtml(comment), TextSyndicationContentKind.Html),
+				comment.html_url, comment.url.AbsoluteUri, comment.updated_at)
+			{
+				Authors = { new SyndicationPerson(null, comment.user.login, null) },
+				PublishDate = comment.created_at,
+			};
+		}
+
+		// Creates the HTML for a feed item for an individual comment.
+		private string CreateFullCommentHtml(GitHubComment comment)
+		{
+			string commentHtml = CreateCommentHtml(comment);
+
+			GitHubCommit commit = m_commits[comment.commit_id];
+			StringBuilder commitHtml = new StringBuilder();
+			commitHtml.AppendFormat(CultureInfo.InvariantCulture, "<div>{0}</div><ul>", HttpUtility.HtmlEncode(commit.commit.message));
+			int cutoff = commit.files.Length == 10 ? 10 : 9;
+			foreach (GitHubFile file in commit.files.OrderBy(f => f.filename, StringComparer.OrdinalIgnoreCase).Take(cutoff))
+				commitHtml.AppendFormat("<li>{0}</li>", HttpUtility.HtmlEncode(file.filename));
+			if (commit.files.Length > cutoff)
+				commitHtml.AppendFormat("<li>… and {0:n0} more</li>", commit.files.Length - cutoff);
+			commitHtml.Append("</ul>");
+
+			string commenter = comment.user.login;
+			string author = commit.author.login;
+
+			return "<h3>Comment by {0}</h3>".FormatWith(HttpUtility.HtmlEncode(commenter)) +
+				commentHtml +
+				"<h3>Commit {0} by {1}</h3>".FormatWith(HttpUtility.HtmlEncode(commit.sha.Substring(0, 8)), HttpUtility.HtmlEncode(author)) +
+				commitHtml.ToString();
+		}
+
 		string m_requestETag;
+		List<GitHubComment> m_comments;
+		Dictionary<string, GitHubCommit> m_commits;
 	}
 }
