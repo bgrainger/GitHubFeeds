@@ -8,3 +8,4 @@ obj/
 _ReSharper.*
 *.DotSettings.user
 *.[Rr]e[Ss]harper.user
+*.Publish.xml
