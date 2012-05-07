@@ -290,9 +290,10 @@ namespace GitHubFeeds.Controllers
 
 		private SyndicationItem CreateFullCommentItem(GitHubComment comment, string fullRepoName)
 		{
-			string author = m_commits[comment.commit_id].author.login;
+			GitHubUser author = m_commits[comment.commit_id].author;
+			string authorName = author != null ? author.login : "(unknown)";
 
-			return new SyndicationItem("Comment on {0}’s commit".FormatWith(author),
+			return new SyndicationItem("Comment on {0}’s commit".FormatWith(authorName),
 				new TextSyndicationContent(CreateFullCommentHtml(comment), TextSyndicationContentKind.Html),
 				comment.html_url, comment.url.AbsoluteUri, comment.updated_at)
 			{
@@ -317,7 +318,7 @@ namespace GitHubFeeds.Controllers
 			commitHtml.Append("</ul>");
 
 			string commenter = comment.user.login;
-			string author = commit.author.login;
+			string author = commit.author != null ? commit.author.login : "(unknown)";
 
 			return "<h3>Comment by {0}</h3>".FormatWith(HttpUtility.HtmlEncode(commenter)) +
 				commentHtml +
