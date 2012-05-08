@@ -1,0 +1,22 @@
+﻿@using GitHubFeeds.Models
+@model GitHubCommentModel
+
+<h3>Comment by @Model.Commenter</h3>
+@{ Html.RenderPartial("Simple", Model); }
+
+<h3>Commit @Model.CommitId by @Model.Author</h3>
+<div>@Model.CommitMessage</div>
+<ul>
+	@foreach (var file in Model.CommitFiles.Take(9))
+	{
+		<li>@file</li>
+	}
+	@if (Model.CommitFiles.Count == 10)
+	{
+		<li>@Model.CommitFiles[9]</li>
+	}
+	else if (Model.CommitFiles.Count > 10)
+	{
+		<li>… and @(Model.CommitFiles.Count - 9) more</li>
+	}
+</ul>

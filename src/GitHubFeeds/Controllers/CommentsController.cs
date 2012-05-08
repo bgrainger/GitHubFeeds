@@ -226,12 +226,10 @@ namespace GitHubFeeds.Controllers
 			foreach (var responseTask in responseTasks)
 			{
 				GitHubCommit commit;
-				using (var response = responseTask.Result)
-				{
-					using (Stream stream = response.GetResponseStream())
-					using (TextReader reader = new StreamReader(stream, Encoding.UTF8))
-						commit = JsonSerializer.DeserializeFromReader<GitHubCommit>(reader);
-				}
+				using (HttpWebResponse response = responseTask.Result)
+				using (Stream stream = response.GetResponseStream())
+				using (TextReader reader = new StreamReader(stream, Encoding.UTF8))
+					commit = JsonSerializer.DeserializeFromReader<GitHubCommit>(reader);
 
 				string commitId = commit.sha;
 				HttpContext.Cache.Insert("commit:" + commitId, commit);
@@ -245,8 +243,7 @@ namespace GitHubFeeds.Controllers
 		private bool CreateFeed(ListParameters p, List<GitHubComment> comments)
 		{
 			// build a feed from the comments (in reverse chronological order)
-			SyndicationFeed feed = new SyndicationFeed(comments.Select(c =>
-				p.Version == 2 ? CreateFullCommentItem(c) : CreateCommentItem(c, p.User + "/" + p.Repo)))
+			SyndicationFeed feed = new SyndicationFeed(comments.Select(c => CreateCommentItem(p, c))) 
 			{
 				Id = "urn:x-feed:" + Uri.EscapeDataString(p.Server) + "/" + Uri.EscapeDataString(p.User) + "/" + Uri.EscapeDataString(p.Repo),
 				LastUpdatedTime = comments.Count == 0 ? DateTimeOffset.Now : comments.Max(c => c.updated_at),
@@ -257,10 +254,23 @@ namespace GitHubFeeds.Controllers
 			return true;
 		}
 
-		private SyndicationItem CreateCommentItem(GitHubComment comment, string fullRepoName)
+		private SyndicationItem CreateCommentItem(ListParameters p, GitHubComment comment)
 		{
-			return new SyndicationItem(comment.user.login + " commented on " + fullRepoName,
-				new TextSyndicationContent(CreateCommentHtml(comment), TextSyndicationContentKind.Html),
+
+			string title;
+			if (p.Version == 1)
+			{
+				title = "{0} commented on {1}/{2}".FormatWith(comment.user.login, p.User, p.Repo);
+			}
+			else
+			{
+				GitHubUser author = m_commits[comment.commit_id].author;
+				string authorName = author != null ? author.login : "(unknown)";
+				title = "Comment on {0}’s commit".FormatWith(authorName);
+			}
+
+			return new SyndicationItem(title,
+				new TextSyndicationContent(CreateCommentHtml(p.Version, comment), TextSyndicationContentKind.Html),
 				comment.html_url, comment.url.AbsoluteUri, comment.updated_at)
 			{
 				Authors = { new SyndicationPerson(null, comment.user.login, null) },
@@ -269,60 +279,44 @@ namespace GitHubFeeds.Controllers
 		}
 
 		// Creates the HTML for a feed item for an individual comment.
-		private static string CreateCommentHtml(GitHubComment comment)
+		private string CreateCommentHtml(int version, GitHubComment comment)
 		{
 			// create URL for the commit from the comment URL
 			string commentUrl = comment.html_url.AbsoluteUri;
 			int hashIndex = commentUrl.IndexOf('#');
 			string commitUrl = hashIndex == -1 ? commentUrl : commentUrl.Substring(0, hashIndex);
 
-			// add description based on whether the comment was on a specific line or not
-			string template = comment.line.GetValueOrDefault() == 0 ?
-				@"<div><a href=""{0}"">Comment</a> on" :
-				@"<div>Comment on <a href=""{0}"">{1}</a> <a href=""{0}"">L{2}</a> in";
-			template += @" <a href=""{3}"">{4}</a>:	<blockquote>{5}</blockquote></div>";
-
-			return string.Format(CultureInfo.InvariantCulture, template, HttpUtility.HtmlAttributeEncode(commentUrl),
-				HttpUtility.HtmlEncode(comment.path), comment.line, HttpUtility.HtmlAttributeEncode(commitUrl),
-				HttpUtility.HtmlEncode(comment.commit_id.Substring(0, 8)), comment.body_html);
-		}
-
-		private SyndicationItem CreateFullCommentItem(GitHubComment comment)
-		{
-			GitHubUser author = m_commits[comment.commit_id].author;
-			string authorName = author != null ? author.login : "(unknown)";
-
-			return new SyndicationItem("Comment on {0}’s commit".FormatWith(authorName),
-				new TextSyndicationContent(CreateFullCommentHtml(comment), TextSyndicationContentKind.Html),
-				comment.html_url, comment.url.AbsoluteUri, comment.updated_at)
+			// create basic model
+			GitHubCommentModel model = new GitHubCommentModel
 			{
-				Authors = { new SyndicationPerson(null, comment.user.login, null) },
-				PublishDate = comment.created_at,
+				CommentUrl = commentUrl,
+				CommitUrl = commitUrl,
+				CommentBody = new HtmlString(comment.body_html),
+				CommitId = comment.commit_id.Substring(0, 8),
+				FilePath = comment.path,
+				LineNumber = comment.line.GetValueOrDefault() == 0 ? null : comment.line,
 			};
-		}
 
-		// Creates the HTML for a feed item for an individual comment.
-		private string CreateFullCommentHtml(GitHubComment comment)
-		{
-			string commentHtml = CreateCommentHtml(comment);
+			// add extra details if present
+			if (version == 2)
+			{
+				GitHubCommit commit = m_commits[comment.commit_id];
+				string commenter = comment.user.login;
+				string author = commit.author != null ? commit.author.login : "(unknown)";
 
-			GitHubCommit commit = m_commits[comment.commit_id];
-			StringBuilder commitHtml = new StringBuilder();
-			commitHtml.AppendFormat(CultureInfo.InvariantCulture, "<div>{0}</div><ul>", HttpUtility.HtmlEncode(commit.commit.message));
-			int cutoff = commit.files.Length == 10 ? 10 : 9;
-			foreach (GitHubFile file in commit.files.OrderBy(f => f.filename, StringComparer.OrdinalIgnoreCase).Take(cutoff))
-				commitHtml.AppendFormat("<li>{0}</li>", HttpUtility.HtmlEncode(file.filename));
-			if (commit.files.Length > cutoff)
-				commitHtml.AppendFormat("<li>… and {0:n0} more</li>", commit.files.Length - cutoff);
-			commitHtml.Append("</ul>");
+				model.Commenter = commenter;
+				model.Author = author;
+				model.CommitMessage = commit.commit.message;
+				model.CommitFiles = commit.files.Select(f => f.filename).OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+			}
 
-			string commenter = comment.user.login;
-			string author = commit.author != null ? commit.author.login : "(unknown)";
-
-			return "<h3>Comment by {0}</h3>".FormatWith(HttpUtility.HtmlEncode(commenter)) +
-				commentHtml +
-				"<h3>Commit {0} by {1}</h3>".FormatWith(HttpUtility.HtmlEncode(commit.sha.Substring(0, 8)), HttpUtility.HtmlEncode(author)) +
-				commitHtml.ToString();
+			using (StringWriter writer = new StringWriter())
+			{
+				ViewEngineResult viewResult = ViewEngines.Engines.FindPartialView(ControllerContext, version == 2 ? "Commit" : "Simple");
+				ViewContext viewContext = new ViewContext(ControllerContext, viewResult.View, new ViewDataDictionary(model), new TempDataDictionary(), writer);
+				viewResult.View.Render(viewContext, writer);
+				return writer.ToString();
+			}
 		}
 
 		string m_requestETag;

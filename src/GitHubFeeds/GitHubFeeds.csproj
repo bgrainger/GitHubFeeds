@@ -97,6 +97,7 @@
     <Compile Include="Helpers\PipelineAsyncController.cs" />
     <Compile Include="Helpers\TaskUtility.cs" />
     <Compile Include="Models\AboutViewModel.cs" />
+    <Compile Include="Models\GitHubCommentModel.cs" />
     <Compile Include="Models\GitHubFile.cs" />
     <Compile Include="Models\GitHubGitCommit.cs" />
     <Compile Include="Models\GitHubCommit.cs" />
@@ -132,6 +133,12 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Views\Web.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Views\Comments\Simple.cshtml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Views\Comments\Commit.cshtml" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v10.0\WebApplications\Microsoft.WebApplication.targets" />

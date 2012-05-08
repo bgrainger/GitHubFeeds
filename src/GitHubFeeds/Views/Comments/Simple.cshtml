@@ -1,0 +1,15 @@
+﻿@using GitHubFeeds.Models
+@model GitHubCommentModel
+
+<div>
+	@if (Model.LineNumber == null)
+	{
+		@:<a href="@Model.CommentUrl">Comment</a> on
+	}
+	else
+	{
+		@:Comment on <a href="@Model.CommentUrl">@Model.FilePath</a> <a href="@Model.CommentUrl">L@(Model.LineNumber)</a> in
+	}
+	<a href="@Model.CommitUrl">@Model.CommitId</a>:
+	<blockquote>@Model.CommentBody</blockquote>
+</div>
