@@ -160,7 +160,7 @@ namespace GitHubFeeds.Controllers
 			if (responseETags.Count == tasks.Length)
 			{
 				// concatenate all the ETag data
-				string eTagData = p.View + "\n" + responseETags.Join("\n");
+				string eTagData = p.Version + "\n" + responseETags.Join("\n");
 
 				// hash it
 				byte[] md5;
@@ -190,7 +190,7 @@ namespace GitHubFeeds.Controllers
 
 			List<Task<HttpWebResponse>> tasks = new List<Task<HttpWebResponse>>();
 
-			if (p.View == "full")
+			if (p.Version == 2)
 			{
 				m_commits = new Dictionary<string, GitHubCommit>();
 
@@ -245,9 +245,8 @@ namespace GitHubFeeds.Controllers
 		private bool CreateFeed(ListParameters p, List<GitHubComment> comments)
 		{
 			// build a feed from the comments (in reverse chronological order)
-			string fullRepoName = p.User + "/" + p.Repo;
 			SyndicationFeed feed = new SyndicationFeed(comments.Select(c =>
-				p.View == "full" ? CreateFullCommentItem(c, fullRepoName) : CreateCommentItem(c, fullRepoName)))
+				p.Version == 2 ? CreateFullCommentItem(c) : CreateCommentItem(c, p.User + "/" + p.Repo)))
 			{
 				Id = "urn:x-feed:" + Uri.EscapeDataString(p.Server) + "/" + Uri.EscapeDataString(p.User) + "/" + Uri.EscapeDataString(p.Repo),
 				LastUpdatedTime = comments.Count == 0 ? DateTimeOffset.Now : comments.Max(c => c.updated_at),
@@ -288,7 +287,7 @@ namespace GitHubFeeds.Controllers
 				HttpUtility.HtmlEncode(comment.commit_id.Substring(0, 8)), comment.body_html);
 		}
 
-		private SyndicationItem CreateFullCommentItem(GitHubComment comment, string fullRepoName)
+		private SyndicationItem CreateFullCommentItem(GitHubComment comment)
 		{
 			GitHubUser author = m_commits[comment.commit_id].author;
 			string authorName = author != null ? author.login : "(unknown)";

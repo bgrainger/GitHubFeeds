@@ -23,7 +23,13 @@ namespace GitHubFeeds
 			routes.MapRoute(
 				"Comments",
 				"comments/{server}/{user}/{repo}",
-				new { controller = "Comments", action = "List" }
+				new { controller = "Comments", action = "List", version = 1 }
+			);
+
+			routes.MapRoute(
+				"CommitComments",
+				"comments/v2/{server}/{user}/{repo}",
+				new { controller = "Comments", action = "List", version = 2 }
 			);
 		}
 

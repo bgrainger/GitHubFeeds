@@ -7,6 +7,6 @@ namespace GitHubFeeds.Models
 		public string Repo { get; set; }
 		public string UserName { get; set; }
 		public string Password { get; set; }
-		public string View { get; set; }
+		public int Version { get; set; }
 	}
 }
