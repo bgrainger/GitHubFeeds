@@ -256,21 +256,12 @@ namespace GitHubFeeds.Controllers
 
 		private SyndicationItem CreateCommentItem(ListParameters p, GitHubComment comment)
 		{
-
-			string title;
-			if (p.Version == 1)
-			{
-				title = "{0} commented on {1}/{2}".FormatWith(comment.user.login, p.User, p.Repo);
-			}
-			else
-			{
-				GitHubUser author = m_commits[comment.commit_id].author;
-				string authorName = author != null ? author.login : "(unknown)";
-				title = "Comment on {0}’s commit".FormatWith(authorName);
-			}
+			GitHubCommentModel model = CreateCommentModel(p.Version, comment);
+			string title = p.Version == 1 ? "{0} commented on {1}/{2}".FormatWith(model.Commenter, p.User, p.Repo) :
+				"Comment on {0}’s commit".FormatWith(model.Author);
 
 			return new SyndicationItem(title,
-				new TextSyndicationContent(CreateCommentHtml(p.Version, comment), TextSyndicationContentKind.Html),
+				new TextSyndicationContent(CreateCommentHtml(p.Version, model), TextSyndicationContentKind.Html),
 				comment.html_url, comment.url.AbsoluteUri, comment.updated_at)
 			{
 				Authors = { new SyndicationPerson(null, comment.user.login, null) },
@@ -278,8 +269,7 @@ namespace GitHubFeeds.Controllers
 			};
 		}
 
-		// Creates the HTML for a feed item for an individual comment.
-		private string CreateCommentHtml(int version, GitHubComment comment)
+		private GitHubCommentModel CreateCommentModel(int version, GitHubComment comment)
 		{
 			// create URL for the commit from the comment URL
 			string commentUrl = comment.html_url.AbsoluteUri;
@@ -295,21 +285,26 @@ namespace GitHubFeeds.Controllers
 				CommitId = comment.commit_id.Substring(0, 8),
 				FilePath = comment.path,
 				LineNumber = comment.line.GetValueOrDefault() == 0 ? null : comment.line,
+				Commenter = comment.user.login,
 			};
 
 			// add extra details if present
 			if (version == 2)
 			{
 				GitHubCommit commit = m_commits[comment.commit_id];
-				string commenter = comment.user.login;
 				string author = commit.author != null ? commit.author.login : "(unknown)";
 
-				model.Commenter = commenter;
 				model.Author = author;
 				model.CommitMessage = commit.commit.message;
 				model.CommitFiles = commit.files.Select(f => f.filename).OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
 			}
 
+			return model;
+		}
+
+		// Creates the HTML for a feed item for an individual comment.
+		private string CreateCommentHtml(int version, GitHubCommentModel model)
+		{
 			using (StringWriter writer = new StringWriter())
 			{
 				ViewEngineResult viewResult = ViewEngines.Engines.FindPartialView(ControllerContext, version == 2 ? "Commit" : "Simple");
