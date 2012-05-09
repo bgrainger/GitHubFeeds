@@ -185,10 +185,11 @@ namespace GitHubFeeds.Controllers
 
 		private Task<List<GitHubComment>> GetCommits(ListParameters p, List<GitHubComment> comments)
 		{
-			List<Task<GitHubCommit>> tasks = new List<Task<GitHubCommit>>();
+			List<Task> tasks = new List<Task>();
 
 			if (p.Version == 2)
 			{
+				object lockObject = new object();
 				m_commits = new Dictionary<string, GitHubCommit>();
 
 				foreach (var commitId in comments.Select(c => c.commit_id).Distinct())
@@ -199,7 +200,8 @@ namespace GitHubFeeds.Controllers
 					if (commit != null)
 					{
 						// if found, store it locally (in case it gets evicted from cache)
-						m_commits.Add(commitId, commit);
+						lock (lockObject)
+							m_commits.Add(commitId, commit);
 					}
 					else
 					{
@@ -212,31 +214,26 @@ namespace GitHubFeeds.Controllers
 						var request = GitHubApi.CreateRequest(uri, p.UserName, p.Password);
 						tasks.Add(request.GetHttpResponseAsync().ContinueWith(t =>
 						{
+							// parse the commit JSON
+							GitHubCommit downloadedCommit;
 							using (HttpWebResponse response = t.Result)
 							using (Stream stream = response.GetResponseStream())
 							using (TextReader reader = new StreamReader(stream, Encoding.UTF8))
-								return JsonSerializer.DeserializeFromReader<GitHubCommit>(reader);
+								downloadedCommit = JsonSerializer.DeserializeFromReader<GitHubCommit>(reader);
+
+							// store in cache
+							string downloadedCommitId = downloadedCommit.sha;
+							HttpContext.Cache.Insert("commit:" + downloadedCommitId, downloadedCommit);
+
+							// also store it locally (in case it gets evicted from cache)
+							lock (lockObject)
+								m_commits.Add(downloadedCommitId, downloadedCommit);
 						}));
 					}
 				}
 			}
 
-			return TaskUtility.ContinueWhenAll(tasks.ToArray(), t =>
-			{
-				CacheCommits(t);
-				return comments;
-			});
-		}
-
-		private void CacheCommits(Task<GitHubCommit>[] commitTasks)
-		{
-			foreach (var commitTask in commitTasks)
-			{
-				GitHubCommit commit = commitTask.Result;
-				string commitId = commit.sha;
-				HttpContext.Cache.Insert("commit:" + commitId, commit);
-				m_commits.Add(commitId, commit);
-			}
+			return TaskUtility.ContinueWhenAll(tasks.ToArray(), t => comments);
 		}
 
 		// Creates an ATOM feed from a list of comments.
