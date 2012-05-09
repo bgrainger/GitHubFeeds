@@ -30,7 +30,6 @@ namespace GitHubFeeds.Controllers
 				.Then(GetCommentCount)
 				.Then(GetCommentPages)
 				.Then(GetComments)
-				.Then(RequestCommits)
 				.Then(GetCommits)
 				.Then(CreateFeed)
 				.Finish();
@@ -184,11 +183,9 @@ namespace GitHubFeeds.Controllers
 				.ToList();
 		}
 
-		private Task<HttpWebResponse>[] RequestCommits(ListParameters p, List<GitHubComment> comments)
+		private Task<List<GitHubComment>> GetCommits(ListParameters p, List<GitHubComment> comments)
 		{
-			m_comments = comments;
-
-			List<Task<HttpWebResponse>> tasks = new List<Task<HttpWebResponse>>();
+			List<Task<GitHubCommit>> tasks = new List<Task<GitHubCommit>>();
 
 			if (p.Version == 2)
 			{
@@ -213,30 +210,33 @@ namespace GitHubFeeds.Controllers
 							Uri.EscapeDataString(p.User), Uri.EscapeDataString(p.Repo), Uri.EscapeDataString(commitId)));
 
 						var request = GitHubApi.CreateRequest(uri, p.UserName, p.Password);
-						tasks.Add(request.GetHttpResponseAsync());
+						tasks.Add(request.GetHttpResponseAsync().ContinueWith(t =>
+						{
+							using (HttpWebResponse response = t.Result)
+							using (Stream stream = response.GetResponseStream())
+							using (TextReader reader = new StreamReader(stream, Encoding.UTF8))
+								return JsonSerializer.DeserializeFromReader<GitHubCommit>(reader);
+						}));
 					}
 				}
 			}
 
-			return tasks.ToArray();
+			return TaskUtility.ContinueWhenAll(tasks.ToArray(), t =>
+			{
+				CacheCommits(t);
+				return comments;
+			});
 		}
 
-		private List<GitHubComment> GetCommits(ListParameters p, Task<HttpWebResponse>[] responseTasks)
+		private void CacheCommits(Task<GitHubCommit>[] commitTasks)
 		{
-			foreach (var responseTask in responseTasks)
+			foreach (var commitTask in commitTasks)
 			{
-				GitHubCommit commit;
-				using (HttpWebResponse response = responseTask.Result)
-				using (Stream stream = response.GetResponseStream())
-				using (TextReader reader = new StreamReader(stream, Encoding.UTF8))
-					commit = JsonSerializer.DeserializeFromReader<GitHubCommit>(reader);
-
+				GitHubCommit commit = commitTask.Result;
 				string commitId = commit.sha;
 				HttpContext.Cache.Insert("commit:" + commitId, commit);
 				m_commits.Add(commitId, commit);
 			}
-
-			return m_comments;
 		}
 
 		// Creates an ATOM feed from a list of comments.
@@ -315,7 +315,6 @@ namespace GitHubFeeds.Controllers
 		}
 
 		string m_requestETag;
-		List<GitHubComment> m_comments;
 		Dictionary<string, GitHubCommit> m_commits;
 	}
 }
