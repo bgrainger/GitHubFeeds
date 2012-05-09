@@ -255,7 +255,7 @@ namespace GitHubFeeds.Controllers
 		{
 			GitHubCommentModel model = CreateCommentModel(p.Version, comment);
 			string title = p.Version == 1 ? "{0} commented on {1}/{2}".FormatWith(model.Commenter, p.User, p.Repo) :
-				"Comment on {0}’s commit".FormatWith(model.Author);
+				"{0}’s commit: {1}".FormatWith(model.Author, RenderCommitForSubject(model));
 
 			return new SyndicationItem(title,
 				new TextSyndicationContent(CreateCommentHtml(p.Version, model), TextSyndicationContentKind.Html),
@@ -264,6 +264,15 @@ namespace GitHubFeeds.Controllers
 				Authors = { new SyndicationPerson(null, comment.user.login, null) },
 				PublishDate = comment.created_at,
 			};
+		}
+
+		private static string RenderCommitForSubject(GitHubCommentModel model)
+		{
+			string message = Regex.Replace(model.CommitMessage, @"\s+", " ").Trim();
+			const int maxLength = 100;
+			if (message.Length > maxLength)
+				message = message.Substring(0, maxLength) + "\u2026";
+			return message;
 		}
 
 		private GitHubCommentModel CreateCommentModel(int version, GitHubComment comment)
