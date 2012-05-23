@@ -262,6 +262,7 @@ namespace GitHubFeeds.Controllers
 				comment.html_url, comment.url.AbsoluteUri, comment.updated_at)
 			{
 				Authors = { new SyndicationPerson(null, comment.user.login, null) },
+				Links  = { new SyndicationLink(new Uri(model.CommitUrl)) { RelationshipType = "related", Title = "CommitUrl" } },
 				PublishDate = comment.created_at,
 			};
 		}
