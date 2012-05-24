@@ -257,13 +257,19 @@ namespace GitHubFeeds.Controllers
 			string title = p.Version == 1 ? "{0} commented on {1}/{2}".FormatWith(model.Commenter, p.User, p.Repo) :
 				"{0}’s commit: {1}".FormatWith(model.Author, RenderCommitForSubject(model));
 
-			return new SyndicationItem(title,
-				new TextSyndicationContent(CreateCommentHtml(p.Version, model), TextSyndicationContentKind.Html),
-				comment.html_url, comment.url.AbsoluteUri, comment.updated_at)
+			return new SyndicationItem
 			{
 				Authors = { new SyndicationPerson(null, comment.user.login, null) },
-				Links  = { new SyndicationLink(new Uri(model.CommitUrl)) { RelationshipType = "related", Title = "CommitUrl" } },
+				Content = new TextSyndicationContent(CreateCommentHtml(p.Version, model), TextSyndicationContentKind.Html),
+				Id = comment.url.AbsoluteUri,
+				LastUpdatedTime = comment.updated_at,
+				Links =
+					{
+						SyndicationLink.CreateAlternateLink(comment.html_url),
+						new SyndicationLink(new Uri(model.CommitUrl)) { RelationshipType = "related", Title = "CommitUrl" }
+					},
 				PublishDate = comment.created_at,
+				Title = new TextSyndicationContent(HttpUtility.HtmlEncode(title), TextSyndicationContentKind.Html),
 			};
 		}
 
